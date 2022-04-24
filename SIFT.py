@@ -3,7 +3,6 @@ import time
 import math
 import cv2
 import numpy as np
-import bottleneck
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from functools import cmp_to_key
@@ -303,9 +302,7 @@ class SIFT:
          
         
         if len(unique_keypoints) > n_points:
-            # threshold = - np.partition(, n_points)[n_points-1]
-            reponses = np.array([-kpt.response for kpt in unique_keypoints])
-            threshold = -bottleneck.partition(-reponses, n_points)[n_points-1]
+            threshold = - np.partition(, n_points)[n_points-1]
             return [keypoint for keypoint in unique_keypoints if keypoint.response >= threshold]
         else:
             return unique_keypoints
