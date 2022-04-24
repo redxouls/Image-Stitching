@@ -304,7 +304,7 @@ class SIFT:
         
         if len(unique_keypoints) > n_points:
             # threshold = - np.partition(, n_points)[n_points-1]
-            # reponses = np.array([-kpt.response for kpt in unique_keypoints])
+            reponses = np.array([-kpt.response for kpt in unique_keypoints])
             threshold = -bottleneck.partition(-reponses, n_points)[n_points-1]
             return [keypoint for keypoint in unique_keypoints if keypoint.response >= threshold]
         else:
@@ -495,9 +495,10 @@ if __name__ == '__main__':
     
     gray = cv2.drawKeypoints(gray, keypoints, gray)
 
-    plt.figure()
-    plt.imshow(gray)
-    plt.show()
+    # plt.figure()
+    # plt.imshow(gray)
+    plt.imsave("keypoint.png", gray)
+    # plt.show()
 
 
     
