@@ -302,7 +302,7 @@ class SIFT:
          
         
         if len(unique_keypoints) > n_points:
-            threshold = - np.partition(, n_points)[n_points-1]
+            threshold = - np.partition(np.array([-kpt.response for kpt in unique_keypoints]), n_points)[n_points-1]
             return [keypoint for keypoint in unique_keypoints if keypoint.response >= threshold]
         else:
             return unique_keypoints
