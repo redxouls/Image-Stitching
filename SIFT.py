@@ -480,12 +480,12 @@ if __name__ == '__main__':
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)    
         
         keypoints, descriptors = sift.detect_and_compute(img)
-        keypoints = [(point.pt, point.size, point.angle, point.response, point.octave, 
+        keypoints_to_sava = [(point.pt, point.size, point.angle, point.response, point.octave, 
         point.class_id) for point in keypoints]
-        np.save(f"./data/{filename[:-4]}_keypoint.npy", keypoints)
+        np.save(f"./data/{filename[:-4]}_keypoint.npy", keypoints_to_sava)
         np.save(f"./data/{filename[:-4]}_descriptor.npy", descriptors)
         gray = cv2.drawKeypoints(gray, keypoints, gray)
         plt.imsave(f"./data/{filename[:-4]}_keypoiny.png", gray)
-        break
+        
 
     
