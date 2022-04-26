@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 from functools import cmp_to_key
 from numpy.linalg import lstsq, norm
 
-
 SIFT_INIT_SIGMA = 0.5
 SIFT_ORI_HIST_BINS = 36
 SIFT_ORI_SIG_FCTR = 1.5
@@ -29,8 +28,12 @@ class SIFT:
     # create base image with double size and convert rgb to gray
     @staticmethod
     def create_initial_image(img, sigma):
-        print("Shape of input image: (%d, %d)" % (img.shape[0], img.shape[1]))
+        print("Shape of input image: (%d, %d, %d)" % (img.shape[0], img.shape[1], img.shape[2]))
         print("Creating base image...")
+        if(img.shape[2] == 3 or img.shape[2] == 4):
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = img.copy()
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)    
         sig_diff = math.sqrt(max(sigma**2 - (2*SIFT_INIT_SIGMA)**2, 0.01) )
         dbl = cv2.resize(gray, (0, 0), fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
@@ -241,7 +244,7 @@ class SIFT:
                 dy = img[y-1, x] - img[y+1, x]
                 X[k], Y[k], W[k] = dx, dy, (i**2 + j**2)*expf_scale
                 k += 1
-                
+
         length = k
 
         # compute gradient values, orientations and the weights over the pixel neighborhood
@@ -299,8 +302,6 @@ class SIFT:
             last_unique_keypoint.angle != next_keypoint.angle:
                 unique_keypoints.append(next_keypoint)
         
-         
-        
         if len(unique_keypoints) > n_points:
             threshold = - np.partition(np.array([-kpt.response for kpt in unique_keypoints]), n_points)[n_points-1]
             return [keypoint for keypoint in unique_keypoints if keypoint.response >= threshold]
@@ -350,7 +351,7 @@ class SIFT:
     def calc_SIFT_descriptor(img, ptf, ori, scl, d, n):
         img = img.astype(np.float32)
         pt = np.round(np.array(ptf)).astype(int)
-        cos_t, sin_t = math.cos(ori*np.pi), math.sin(ori*np.pi)
+        cos_t, sin_t = math.cos(ori*np.pi/180), math.sin(ori*np.pi/180)
         bins_per_rad = n / 360
         exp_scale = 1 / ((d**2)*0.5)
         hist_width = SIFT_DESCR_SCL_FCTR * scl
@@ -399,7 +400,7 @@ class SIFT:
             cbin -= c0
             obin -= o0
             
-            o0 %= n
+            o0 =  o0 % n
 
             v_r1 = mag*rbin
             v_r0 = mag - v_r1
@@ -444,58 +445,44 @@ class SIFT:
         dst[k] = np.maximum(np.minimum(dst[k]*nrm2, 255), 0)
         return dst
 
+    @staticmethod
+    def detect_and_compute(img):
+        base_img = SIFT.create_initial_image(img, sigma=1.6)
+        pyr = SIFT.build_gaussian_pyramid(base_img, sigma=1.6, n_octave_layers=3)
+        dog_pyr = SIFT.build_DoG_pyramid(pyr)
+        keypoints = SIFT.find_scale_space_extrema(pyr, dog_pyr,  n_octave_layers=3, sigma=1.6, image_border_width=5, contrast_threshold=0.04)
+        
+        keypoints = SIFT.remove_duplicate_keypoints(keypoints, n_points=2000)
+        keypoints = SIFT.convert_keypoints_to_input_image_size(keypoints)
+        descriptors = SIFT.calc_descriptors(dog_pyr, keypoints, n_octave_layers=3)
 
+        return keypoints, descriptors
 
 if __name__ == '__main__':
+    import argparse
+    import os
+    
+    
+    filenames = sorted(os.listdir("./images"))
     sift = SIFT()
-    img = cv2.imread("./images/DSC02973.JPG", cv2.IMREAD_COLOR)
     
-    scale_percent = 10 # percent of original size
-    width = int(img.shape[1] * scale_percent / 100)
-    height = int(img.shape[0] * scale_percent / 100)
-    dim = (width, height)
-    
-    # resize image
-    img = cv2.resize(img, dim, interpolation = cv2.INTER_AREA)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)    
-    
-    
-    base_img = sift.create_initial_image(img, sigma=1.6)
-    pyr = sift.build_gaussian_pyramid(base_img, sigma=1.6, n_octave_layers=3)
-    dog_pyr = sift.build_DoG_pyramid(pyr)
-    keypoints = sift.find_scale_space_extrema(pyr, dog_pyr,  n_octave_layers=3, sigma=1.6, image_border_width=5, contrast_threshold=0.04)
-    
-    keypoints = sift.remove_duplicate_keypoints(keypoints, n_points=2000)
-    keypoints = sift.convert_keypoints_to_input_image_size(keypoints)
-    # descriptors = sift.calc_descriptors(dog_pyr, keypoints, n_octave_layers=3)
-    print(len(keypoints))
-    # print(len(descriptors))
-
-
-    # for keypoint in keypoints:
-           
-    #     # Center coordinates 
-    #     center_coordinates = (int(keypoint.pt[0]), int(keypoint.pt[1]))
+    for filename in filenames:
+        img = cv2.imread(f"./images/{filename}", cv2.IMREAD_COLOR)
         
-    #     # Radius of circle 
-    #     radius = 2
+        scale_percent = 10 # percent of original size
+        width = int(img.shape[1] * scale_percent / 100)
+        height = int(img.shape[0] * scale_percent / 100)
+        dim = (width, height)
         
-    #     # Blue color in BGR 
-    #     color = (255, 0, 0) 
+        # resize image
+        img = cv2.resize(img, dim, interpolation = cv2.INTER_AREA)
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)    
         
-    #     # Line thickness of 2 px 
-    #     thickness = 2
-        
-    #     # Using cv2.circle() method 
-    #     # Draw a circle with blue line borders of thickness of 2 px 
-    #     gray = cv2.circle(gray, center_coordinates, radius, color, thickness) 
-    
-    gray = cv2.drawKeypoints(gray, keypoints, gray)
-
-    # plt.figure()
-    # plt.imshow(gray)
-    plt.imsave("keypoint.png", gray)
-    # plt.show()
-
+        keypoints, descriptors = sift.detect_and_compute(img)
+        np.save(f"./data/{filename[:-4]}_keypoint.npy", keypoints)
+        np.save(f"./data/{filename[:-4]}_descriptor.npy", descriptors)
+        gray = cv2.drawKeypoints(gray, keypoints, gray)
+        plt.imsave(f"./data/{filename[:-4]}_keypoiny.png", gray)
+        break
 
     
