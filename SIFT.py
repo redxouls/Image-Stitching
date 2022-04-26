@@ -376,13 +376,14 @@ class SIFT:
             for j in range(-radius, radius+1):
                 c_rot, r_rot = j * cos_t - i *sin_t,  j * sin_t + i * cos_t
                 rbin, cbin = r_rot + d/2 - 0.5, c_rot + d/2 - 0.5
-                r, c = pt[1]+i , pt[0] + j
+                r, c = pt[1]+i , pt[0]+j
 
                 if (rbin > -1 and rbin < d and cbin > -1 and cbin < d and
                     r > 0 and r < rows - 1 and c > 0 and c < cols - 1):
                     dx = img[r, c+1] - img[r, c-1]
                     dy = img[r-1, c] - img[r+1, c]
                     X[k], Y[k], RBin[k], CBin[k] = dx, dy, rbin, cbin
+                    W[k] = (c_rot * c_rot + r_rot * r_rot)*exp_scale
                     k += 1
 
         length = k
@@ -466,7 +467,7 @@ if __name__ == '__main__':
     filenames = sorted(os.listdir("./images"))
     sift = SIFT()
     
-    for filename in filenames:
+    for filename in filenames[1:]:
         img = cv2.imread(f"./images/{filename}", cv2.IMREAD_COLOR)
         
         scale_percent = 10 # percent of original size
@@ -479,6 +480,8 @@ if __name__ == '__main__':
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)    
         
         keypoints, descriptors = sift.detect_and_compute(img)
+        keypoints = [(point.pt, point.size, point.angle, point.response, point.octave, 
+        point.class_id) for point in keypoints]
         np.save(f"./data/{filename[:-4]}_keypoint.npy", keypoints)
         np.save(f"./data/{filename[:-4]}_descriptor.npy", descriptors)
         gray = cv2.drawKeypoints(gray, keypoints, gray)
