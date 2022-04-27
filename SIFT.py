@@ -332,12 +332,12 @@ class SIFT:
             octave = kpt.octave & 255
             layer = (kpt.octave >> 8) & 255
             if octave >= 128:
-                octave = -128 | octave
+                octave = octave | -128
             if octave >= 0:
-                scale = 1 / (1 << octave)
-            else:
-                scale = 1 << (-octave)
-            assert (octave >= -1 and layer <= n_octave_layers+2)
+                scale = 1 / (1 << octave) 
+            else: 
+                scale = 1 << -octave
+            # assert (octave >= -1 and layer <= n_octave_layers+2)
             size = kpt.size * scale
             ptf = (kpt.pt[0]*scale, kpt.pt[1]*scale)
             img = pyr[(octave + 1),  layer]
@@ -345,7 +345,7 @@ class SIFT:
             
             if np.zeros_like(abs(angle - 360)):
                 angle = 0
-            print(f"Calculating descriptors at ({kpt.pt[0]}, {kpt.pt[1]})")
+            # print(f"Calculating descriptors at ({kpt.pt[0]}, {kpt.pt[1]})")
             descriptor = SIFT.calc_SIFT_descriptor(img, ptf, angle, size*0.5, d, n)
             descriptors.append(descriptor)
         
@@ -354,18 +354,21 @@ class SIFT:
     @staticmethod
     def calc_SIFT_descriptor(img, ptf, ori, scl, d, n):
         img = img.astype(np.float32)
+        rows, cols = img.shape
         pt = np.round(np.array(ptf)).astype(int)
-        cos_t, sin_t = math.cos(ori*np.pi/180), math.sin(ori*np.pi/180)
+        cos_t, sin_t = math.cos(np.deg2rad(ori)), math.sin(np.deg2rad(ori))
         bins_per_rad = n / 360
         exp_scale = 1 / ((d**2)*0.5)
         hist_width = SIFT_DESCR_SCL_FCTR * scl
+        
         radius = int(np.round(hist_width * math.sqrt(2) * (d+1) * 0.5))
+        radius = int(min(radius, math.sqrt(rows ** 2 + cols ** 2)))
+        
         cos_t /= hist_width
         sin_t /= hist_width
 
         length = (radius*2+1)**2
         hist_length = ((d+2)**2) * (n+2)
-        rows, cols = img.shape
 
         X = np.zeros(length, dtype=np.float32)
         Y = np.zeros(length, dtype=np.float32)
@@ -392,7 +395,7 @@ class SIFT:
 
         length = k
         W = np.exp(W[:length])
-        Ori = np.arctan2(Y[:length], X[:length])
+        Ori = np.deg2rad(np.arctan2(Y[:length], X[:length]))
         Mag = np.sqrt(np.power(X[:length], 2) + np.power(Y[:length], 2))
 
         for k in range(length):
@@ -422,16 +425,17 @@ class SIFT:
             v_rco001 = v_rc00*obin
             v_rco000 = v_rc00 - v_rco001
 
-
-            idx = ((r0+1)*(d+2) + c0+1)*(n+2) + o0
+            # print(r0, c0, o0)
+            idx = ((r0+1)*(d+2) + c0+1)*(d+2) + o0
+            # print(idx)
             hist[idx] += v_rco000
             hist[idx+1] += v_rco001
-            hist[idx+(n+2)] += v_rco010
-            hist[idx+(n+3)] += v_rco011
-            hist[idx+(d+2)*(n+2)] += v_rco100
-            hist[idx+(d+2)*(n+2)+1] += v_rco101
-            hist[idx+(d+3)*(n+2)] += v_rco110
-            hist[idx+(d+3)*(n+2)+1] += v_rco111
+            hist[idx+(d+2)] += v_rco010
+            hist[idx+(d+3)] += v_rco011
+            hist[idx+(d+2)*(d+2)] += v_rco100
+            hist[idx+(d+2)*(d+2)+1] += v_rco101
+            hist[idx+(d+3)*(d+2)] += v_rco110
+            hist[idx+(d+3)*(d+2)+1] += v_rco111
         
         length = d*d*n
         dst = np.zeros(length, dtype=np.float32)
@@ -443,7 +447,6 @@ class SIFT:
                 for k in range(n):
                     dst[(i*d + j)*n + k] = hist[idx+k]
                     
-        
         thr = norm(dst)*SIFT_DESCR_MAG_THR
         dst = np.minimum(dst, thr)
         nrm2 = SIFT_INT_DESCR_FCTR/max(norm(dst), sys.float_info.epsilon)
@@ -478,12 +481,13 @@ def safe_mkdir(directory):
 if __name__ == '__main__':
     args = get_args()
     
-    filenames = sorted(os.listdir(args.input))
+    filenames = sorted(os.listdir(args.input))[4:]
+    print(filenames)
     safe_mkdir(args.output)
 
     sift = SIFT()
     
-    for filename in filenames[1:]:
+    for filename in filenames:
         img = cv2.imread(os.path.join(args.input, filename), cv2.IMREAD_COLOR)
         
         scale_percent = 10 # percent of original size
