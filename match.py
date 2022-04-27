@@ -7,26 +7,31 @@ import glob
 from PIL import Image
 from SIFT import SIFT
 from tqdm import tqdm
+import os
 
 
-filenames = sorted(glob.glob("images/*"))
+filenames = sorted(os.listdir("./images"))
 print(filenames)
 
 imgs = []
 keypoints, descriptors = [], []
 scale_percent = 10 # percent of original size
 
-for filename in filenames[15:17]:
-    img = cv.imread(filename)
-    imgs.append(img)
+for filename in filenames[1:]:
+    img = cv.imread(f"./images/{filename}")
     width = int(img.shape[1] * scale_percent / 100)
     height = int(img.shape[0] * scale_percent / 100)
     dim = (width, height)
     img = cv.resize(img, dim, interpolation=cv.INTER_AREA)
+    imgs.append(img)
 
-    sift = SIFT()
-    k, d = sift.detect_and_compute(img)
+    # sift = SIFT()
+    # k, d = sift.detect_and_compute(img)
     
+    k_raw = np.load(f"./data/{filename[:-4]}_keypoint.npy", allow_pickle=True)
+    k = [cv.KeyPoint(x=point[0][0],y=point[0][1],_size=point[1], _angle=point[2], _response=point[3], _octave=point[4], _class_id=point[5]) for point in k_raw]
+    d = np.load(f"./data/{filename[:-4]}_descriptor.npy", allow_pickle=True)
+
     keypoints.append(k)
     descriptors.append(d)
     print(f"Filename: {filename} , Keypoints#: {len(k)}")
@@ -85,7 +90,7 @@ def homography(p1, p2):
   H = H/H[2, 2] # standardize to let w*H[2,2] = 1
   return H
 
-def ransac(p1, p2, thresh = 10, k = 4, iter = 5000):
+def ransac(p1, p2, thresh = 10, k = 4, iter = 2000):
   max_match = 0
   all_match = []
   best_match_pairs = [[], []]
@@ -118,7 +123,7 @@ def ransac(p1, p2, thresh = 10, k = 4, iter = 5000):
 
 H, pairs = ransac(p1, p2)
 total_img = np.concatenate((imgs[0], imgs[1]), axis=1)
-# plot_matches(pairs[0], pairs[1], total_img)
+plot_matches(pairs[0], pairs[1], total_img)
 
 
 def stitch_img(left, right, H):
