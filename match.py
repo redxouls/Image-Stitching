@@ -10,27 +10,29 @@ from tqdm import tqdm
 import os
 
 
-filenames = sorted(os.listdir("./images"))
+filenames = sorted(os.listdir("./parrington"), reverse=True)
+filenames = [filename for filename in filenames if filename.startswith("prtn")]
 print(filenames)
 
 imgs = []
 keypoints, descriptors = [], []
-scale_percent = 10 # percent of original size
+scale_percent = 50 # percent of original size
 
-for filename in filenames[1:]:
-    img = cv.imread(f"./images/{filename}")
-    width = int(img.shape[1] * scale_percent / 100)
-    height = int(img.shape[0] * scale_percent / 100)
-    dim = (width, height)
-    img = cv.resize(img, dim, interpolation=cv.INTER_AREA)
+for filename in filenames[16:18]:
+    img = cv.imread(f"./parrington/{filename}")
+    if scale_percent != 100:
+        width = int(img.shape[1] * scale_percent / 100)
+        height = int(img.shape[0] * scale_percent / 100)
+        dim = (width, height)
+        img = cv.resize(img, dim, interpolation=cv.INTER_AREA)
     imgs.append(img)
 
-    # sift = SIFT()
-    # k, d = sift.detect_and_compute(img)
+    sift = SIFT()
+    k, d = sift.detect_and_compute(img)
     
-    k_raw = np.load(f"./data/{filename[:-4]}_keypoint.npy", allow_pickle=True)
-    k = [cv.KeyPoint(x=point[0][0],y=point[0][1],_size=point[1], _angle=point[2], _response=point[3], _octave=point[4], _class_id=point[5]) for point in k_raw]
-    d = np.load(f"./data/{filename[:-4]}_descriptor.npy", allow_pickle=True)
+    # k_raw = np.load(f"./data/{filename[:-4]}_keypoint.npy", allow_pickle=True)
+    # k = [cv.KeyPoint(x=point[0][0],y=point[0][1],_size=point[1], _angle=point[2], _response=point[3], _octave=point[4], _class_id=point[5]) for point in k_raw]
+    # d = np.load(f"./data/{filename[:-4]}_descriptor.npy", allow_pickle=True)
 
     keypoints.append(k)
     descriptors.append(d)
@@ -187,5 +189,5 @@ def stitch_img(left, right, H):
     return stitch_image
 
 
-plt.imshow(stitch_img(imgs[0], imgs[1], H))
+plt.imshow(stitch_img(imgs[1], imgs[0], H))
 plt.show()
