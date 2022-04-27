@@ -1,3 +1,5 @@
+import argparse
+import os
 import sys
 import time
 import math
@@ -322,7 +324,7 @@ class SIFT:
         return converted_keypoints
 
     @staticmethod
-    def calc_descriptors(dog_pyr, keypoints, n_octave_layers):
+    def calc_descriptors(pyr, keypoints, n_octave_layers):
         d, n = SIFT_DESCR_WIDTH, SIFT_DESCR_HIST_BINS
 
         descriptors = []
@@ -335,13 +337,15 @@ class SIFT:
                 scale = 1 / (1 << octave)
             else:
                 scale = 1 << (-octave)
+            assert (octave >= -1 and layer <= n_octave_layers+2)
             size = kpt.size * scale
             ptf = (kpt.pt[0]*scale, kpt.pt[1]*scale)
-            img = dog_pyr[(octave + 1),  layer]
+            img = pyr[(octave + 1),  layer]
             angle = 360 - kpt.angle
             
             if np.zeros_like(abs(angle - 360)):
                 angle = 0
+            print(f"Calculating descriptors at ({kpt.pt[0]}, {kpt.pt[1]})")
             descriptor = SIFT.calc_SIFT_descriptor(img, ptf, angle, size*0.5, d, n)
             descriptors.append(descriptor)
         
@@ -383,7 +387,7 @@ class SIFT:
                     dx = img[r, c+1] - img[r, c-1]
                     dy = img[r-1, c] - img[r+1, c]
                     X[k], Y[k], RBin[k], CBin[k] = dx, dy, rbin, cbin
-                    W[k] = (c_rot * c_rot + r_rot * r_rot)*exp_scale
+                    W[k] = (c_rot**2 + r_rot**2)*exp_scale
                     k += 1
 
         length = k
@@ -455,20 +459,31 @@ class SIFT:
         
         keypoints = SIFT.remove_duplicate_keypoints(keypoints, n_points=2000)
         keypoints = SIFT.convert_keypoints_to_input_image_size(keypoints)
-        descriptors = SIFT.calc_descriptors(dog_pyr, keypoints, n_octave_layers=3)
+        descriptors = SIFT.calc_descriptors(pyr, keypoints, n_octave_layers=3)
 
         return keypoints, descriptors
 
+def get_args():
+    parser = argparse.ArgumentParser(description='Evaluate test set with pretrained inceptionv3 model.')
+    parser.add_argument('--input', '-i', type=str, default=None, help='Input folder path for all images', required=True)
+    parser.add_argument('--output', '-o', type=str, default=None, help='Output path for keypoint, descriptors npy', required=True)
+    return parser.parse_args()
+
+def safe_mkdir(directory):
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+
 if __name__ == '__main__':
-    import argparse
-    import os
+    args = get_args()
     
-    
-    filenames = sorted(os.listdir("./images"))
+    filenames = sorted(os.listdir(args.input))
+    safe_mkdir(os.path.dirname(args.output))
+
     sift = SIFT()
     
     for filename in filenames[1:]:
-        img = cv2.imread(f"./images/{filename}", cv2.IMREAD_COLOR)
+        img = cv2.imread(os.path.join(args.input, filename), cv2.IMREAD_COLOR)
         
         scale_percent = 10 # percent of original size
         width = int(img.shape[1] * scale_percent / 100)
@@ -482,10 +497,8 @@ if __name__ == '__main__':
         keypoints, descriptors = sift.detect_and_compute(img)
         keypoints_to_sava = [(point.pt, point.size, point.angle, point.response, point.octave, 
         point.class_id) for point in keypoints]
-        np.save(f"./data/{filename[:-4]}_keypoint.npy", keypoints_to_sava)
-        np.save(f"./data/{filename[:-4]}_descriptor.npy", descriptors)
+        np.save(os.path.join(args.output, f"{filename[:-4]}_keypoint.npy"), keypoints_to_sava)
+        np.save(os.path.join(args.output, f"{filename[:-4]}_descriptor.npy"), descriptors)
         gray = cv2.drawKeypoints(gray, keypoints, gray)
-        plt.imsave(f"./data/{filename[:-4]}_keypoiny.png", gray)
+        plt.imsave(os.path.join(args.output, f"{filename[:-4]}_keypoiny.png"), gray)
         
-
-    
