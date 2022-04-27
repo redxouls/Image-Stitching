@@ -472,13 +472,14 @@ def get_args():
 def safe_mkdir(directory):
     if not os.path.exists(directory):
         os.makedirs(directory)
+        print(f"Make Directory at path {directory}")
 
 
 if __name__ == '__main__':
     args = get_args()
     
     filenames = sorted(os.listdir(args.input))
-    safe_mkdir(os.path.dirname(args.output))
+    safe_mkdir(args.output)
 
     sift = SIFT()
     
