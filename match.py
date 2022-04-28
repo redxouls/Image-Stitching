@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 import glob
 from PIL import Image
 from tqdm import tqdm
-from SIFT import SIFT  as S
+from SIFT import SIFT as S
 
 def SIFT(img):
   gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
@@ -33,8 +33,6 @@ def cylindrical_warp(src, f):
   while np.array_equal(warp[ int(warp.shape[0]/2), cutoff[1] ], black):
     cutoff[1] -= 1
   warp = warp[ :, cutoff[0]+2 : cutoff[1]-1 ]
-  print(cutoff)
-
   
   return warp
 
@@ -45,7 +43,7 @@ def match_feat(kp_tar, des_tar, kp_src, des_src):
   
   for point in des_src:
     dist0, ind0 = tree[0].query(point, k=2)
-    if dist0[0] / dist0[1] > 0.7:
+    if dist0[0] / dist0[1] > 0.5:
       continue
     dist0, ind0 = dist0[0], ind0[0]
     dist1, ind1 = tree[1].query(des_tar[ind0], k=1)
@@ -159,7 +157,7 @@ def ransac(tar, src, thresh = 0.5, k = 3, iter = 3000, method = "affine"):
 # plot_matches(pairs[0], pairs[1], total_img)
 
 def stitch_img(img1, img2, trans):
-  # print("Stitching image")
+  print("Stitching image")
   # stitch img2 to img1
   # img1 = cv.normalize(img1.astype('float'), None, 0.0, 1.0, cv.NORM_MINMAX)
   # img2 = cv.normalize(img2.astype('float'), None, 0.0, 1.0, cv.NORM_MINMAX)
@@ -178,7 +176,7 @@ def stitch_img(img1, img2, trans):
   max_h = max(img1.shape[1], max(mapped_corners[:, 0]))
   
   mapped_h = [ min(mapped_corners[:, 0]), max(mapped_corners[:, 0]) ]
-  mapped_v = [ min(mapped_corners[:, 1]) - min_v, max(mapped_corners[:, 1]) ]
+  mapped_v = [ min(mapped_corners[:, 1]) - min_v, max(mapped_corners[:, 1]) - min_v ]
 
   trans_new = trans.copy()
   trans_new[1, 2] += abs(min_v)
@@ -194,11 +192,46 @@ def stitch_img(img1, img2, trans):
   # print(warped_l.shape)
   # cv.imwrite('warped_l.jpg', np.array(warped_l))
 
-  
-
   w, h = max_h, max_v - min_v
   # warped = cv.warpPerspective(src = img2, M = trans_new, dsize = ( w, h ) )
   warped_r = cv.warpAffine(src = img2, M = trans_new, dsize = (w, h)).astype('uint32')
+
+  weight = np.zeros( (h, mapped_h[1]) )
+  black = np.zeros(3)  # Black pixel.
+
+  # clean up horizontal edges from affine transform
+  for j in range(mapped_h[0], img1.shape[1]):
+    u, d = mapped_v[0], mapped_v[1]-1
+    while u < mapped_v[1]-4 and np.array_equal(warped_r[ u, j ], black):
+      u += 1
+    while d > mapped_v[0]+3 and np.array_equal(warped_r[ d, j ], black):
+      d -= 1
+    for offset in range(3):
+      warped_r[u + offset, j] = black
+      warped_r[d - offset, j] = black
+
+  # clean up vertical edges from affine transform and define weight (for blending)
+  for i in range( mapped_v[0], mapped_v[1] ):
+    l, r = mapped_h[0], mapped_h[1]-1
+    while l < mapped_h[1]-4 and np.array_equal(warped_r[ i, l ], black):
+      l += 1
+    while r > mapped_h[0]+3 and np.array_equal(warped_r[ i, r ], black):
+      r -= 1
+    for offset in range(3):
+      warped_r[i, l + offset] = black
+      warped_r[i, r - offset] = black
+    
+    img1_r = img1.shape[1] - 1
+    while img1_r > l+4 and np.array_equal(warped_l[ i, img1_r ], black):
+      img1_r -= 1
+
+    if img1_r - (l+4) < 0:
+      continue
+    interval = 1.0 / (img1_r - (l+4) + 2)
+    ind = 1
+    for j in range(l+4, img1_r+1):
+      weight[i, j] = ind * interval
+      ind += 1
 
   # print(warped_r.shape)
   # fig, ax = plt.subplots()
@@ -206,7 +239,6 @@ def stitch_img(img1, img2, trans):
   
   # cv.imwrite('warped_r.jpg', np.array(warped_r))
 
-  black = np.zeros(3)  # Black pixel.
   # Stitching procedure, store results in warped_l.
   for i in range( mapped_v[0], mapped_v[1] ):
       for j in range( mapped_h[0], mapped_h[1] ):
@@ -218,7 +250,7 @@ def stitch_img(img1, img2, trans):
           elif np.array_equal(pixel_l, black) and not np.array_equal(pixel_r, black):
               warped_l[i, j, :] = pixel_r
           elif not np.array_equal(pixel_l, black) and not np.array_equal(pixel_r, black):
-              warped_l[i, j, :] = (pixel_l + pixel_r) / 2
+              warped_l[i, j, :] = pixel_l * (1-weight[i,j]) + pixel_r * weight[i,j]
           else:
               pass
                 
@@ -228,22 +260,29 @@ def stitch_img(img1, img2, trans):
 # stitched = stitch_img(img[16], img[15], A)
 # plt.imshow(stitched)
 
+fns = sorted(glob.glob(os.path.join("Jiannan","*.JPG")))
+print(fns)
+img = []
+kp, des = [], []
+pre, cur = None, None
+
+img = cv.imread(fns[0])
+resize_ratio = 8
+dim = ( img.shape[0] // resize_ratio, img.shape[1] // resize_ratio )
+print("Resized dimension:", dim)
+
 # assume we can get the focal length estimate
 focal = []
-with open(os.path.join("parrington", "pano.txt")) as f:
+with open(os.path.join("Jiannan", "pano.txt")) as f:
   ind = 1
   for line in f:
     if ind % 13 == 12:
       focal.append(float(line))
     ind += 1
-print(focal)
 
-fns = sorted(glob.glob(os.path.join("parrington","prtn*.jpg")))[:3]
-print(fns)
-img = []
-kp, des = [], []
-pre, cur = None, None
-# dim = (795, 530)
+# focal = [f/resize_ratio for f in focal]
+
+print("focal lengths:", focal)
 
 class Partial_img:
   def __init__(self, img = None, kp = None, des = None):
@@ -251,15 +290,15 @@ class Partial_img:
     self.kp = kp
     self.des = des
 panorama = None
-for i in tqdm(range(len(fns)-1, -1, -1)):
-  # tmp = cv.resize(cv.imread(fns[i]), (dim[1], dim[0]))
-  img = cv.imread(fns[i])
+for i in tqdm(range(len(fns))):
+  img = cv.resize(cv.imread(fns[i]), (dim[1], dim[0]))
+  # img = cv.imread(fns[i])
   img = cylindrical_warp(img, focal[i])
   k, d = SIFT(img)
 
   cur = Partial_img(img, k, d)
   print( fns[i], "keypoint num:", len(k))
-  if i == len(fns)-1:
+  if i == 0:
     panorama = cur.img
     pre, cur = cur, None
     continue
@@ -271,39 +310,8 @@ for i in tqdm(range(len(fns)-1, -1, -1)):
   cur.kp, cur.des = SIFT(cur_img)
 
   cv.imwrite('panorama.jpg', panorama)
+  cv.imwrite('drive/MyDrive/panorama.png', panorama)
 
   pre, cur = cur, None
 
 plt.imshow(panorama)
-
-
-# filenames = sorted(os.listdir("./Jiannan"))
-# # filenames = [filename for filename in filenames if filename.startswith("prtn")]
-# print(filenames)
-
-# imgs = []
-# keypoints, descriptors = [], []
-# scale_percent = 10 # percent of original size
-
-# for filename in filenames[4:6]:
-# 	img = cv.imread(f"./Jiannan/{filename}")
-# 	if scale_percent != 100:
-# 			width = int(img.shape[1] * scale_percent / 100)
-# 			height = int(img.shape[0] * scale_percent / 100)
-# 			dim = (width, height)
-# 			img = cv.resize(img, dim, interpolation=cv.INTER_AREA)
-# 	imgs.append(img)
-
-# 	# sift = SIFT()
-# 	# k, d = sift.detect_and_compute(img)
-	
-# 	k_raw = np.load(f"./data/Jiannan/{filename[:-4]}_keypoint.npy", allow_pickle=True)
-# 	k = [cv.KeyPoint(x=point[0][0],y=point[0][1],_size=point[1], _angle=point[2], _response=point[3], _octave=point[4], _class_id=point[5]) for point in k_raw]
-# 	d = np.load(f"./data/Jiannan/{filename[:-4]}_descriptor.npy", allow_pickle=True)
-
-# 	keypoints.append(k)
-# 	descriptors.append(d)
-# 	print(f"Filename: {filename} , Keypoints#: {len(k)}")
-
-# imgs = np.array(imgs)
-

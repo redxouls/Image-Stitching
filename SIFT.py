@@ -30,7 +30,7 @@ class SIFT:
     # create base image with double size and convert rgb to gray
     @staticmethod
     def create_initial_image(img, sigma):
-        # print("Shape of input image: (%d, %d, %d)" % (img.shape[0], img.shape[1], img.shape[2]))
+        print(f"Shape of input image: {str(img.shape)}")
         print("Creating base image...")
         if(len(img.shape) > 2 and (img.shape[2] == 3 or img.shape[2] == 4)):
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -454,9 +454,9 @@ class SIFT:
         base_img = SIFT.create_initial_image(img, sigma=1.6)
         pyr = SIFT.build_gaussian_pyramid(base_img, sigma=1.6, n_octave_layers=3)
         dog_pyr = SIFT.build_DoG_pyramid(pyr)
-        keypoints = SIFT.find_scale_space_extrema(pyr, dog_pyr,  n_octave_layers=3, sigma=1.6, image_border_width=5, contrast_threshold=0.05)
+        keypoints = SIFT.find_scale_space_extrema(pyr, dog_pyr,  n_octave_layers=3, sigma=1.6, image_border_width=5, contrast_threshold=0.06)
         
-        keypoints = SIFT.remove_duplicate_keypoints(keypoints, n_points=2000)
+        keypoints = SIFT.remove_duplicate_keypoints(keypoints, n_points=1000)
         keypoints = SIFT.convert_keypoints_to_input_image_size(keypoints)
         descriptors = SIFT.calc_descriptors(pyr, keypoints, n_octave_layers=3)
 
