@@ -251,11 +251,11 @@ class SIFT:
 
         # compute gradient values, orientations and the weights over the pixel neighborhood
         W = np.exp(W[:length])
-        Ori = np.arctan2(Y[:length], X[:length])
+        Ori = np.rad2deg(np.arctan2(Y[:length], X[:length]))
         Mag = np.sqrt(np.power(X[:length], 2) + np.power(Y[:length], 2))
 
         for k in range(length):
-            bin_vote = int(np.round(((n/(2*np.pi)*Ori[k])))) % n
+            bin_vote = np.round((n/360)*Ori[k]).astype(int) % n
             temphist[bin_vote] += W[k]*Mag[k]
 
         # smooth the histogram
@@ -269,8 +269,6 @@ class SIFT:
 
     @staticmethod
     def compare_keypoints(keypoint1, keypoint2):
-        """Return True if keypoint1 is less than keypoint2
-        """
         if keypoint1.pt[0] != keypoint2.pt[0]:
             return keypoint1.pt[0] - keypoint2.pt[0]
         if keypoint1.pt[1] != keypoint2.pt[1]:
@@ -287,8 +285,6 @@ class SIFT:
 
     @staticmethod
     def remove_duplicate_keypoints(keypoints, n_points):
-        """Sort keypoints and remove duplicate keypoints
-        """
         if len(keypoints) < 2:
             return keypoints
 
@@ -395,7 +391,7 @@ class SIFT:
 
         length = k
         W = np.exp(W[:length])
-        Ori = np.deg2rad(np.arctan2(Y[:length], X[:length]))
+        Ori = np.rad2deg(np.arctan2(Y[:length], X[:length]))
         Mag = np.sqrt(np.power(X[:length], 2) + np.power(Y[:length], 2))
 
         for k in range(length):
@@ -430,12 +426,12 @@ class SIFT:
             # print(idx)
             hist[idx] += v_rco000
             hist[idx+1] += v_rco001
-            hist[idx+(d+2)] += v_rco010
-            hist[idx+(d+3)] += v_rco011
-            hist[idx+(d+2)*(d+2)] += v_rco100
-            hist[idx+(d+2)*(d+2)+1] += v_rco101
-            hist[idx+(d+3)*(d+2)] += v_rco110
-            hist[idx+(d+3)*(d+2)+1] += v_rco111
+            hist[idx+(n+2)] += v_rco010
+            hist[idx+(n+3)] += v_rco011
+            hist[idx+(d+2)*(n+2)] += v_rco100
+            hist[idx+(d+2)*(n+2)+1] += v_rco101
+            hist[idx+(d+3)*(n+2)] += v_rco110
+            hist[idx+(d+3)*(n+2)+1] += v_rco111
         
         length = d*d*n
         dst = np.zeros(length, dtype=np.float32)
@@ -450,7 +446,7 @@ class SIFT:
         thr = norm(dst)*SIFT_DESCR_MAG_THR
         dst = np.minimum(dst, thr)
         nrm2 = SIFT_INT_DESCR_FCTR/max(norm(dst), sys.float_info.epsilon)
-        dst[k] = np.maximum(np.minimum(dst[k]*nrm2, 255), 0)
+        dst = np.maximum(np.minimum(np.round(dst*nrm2), 255), 0)
         return dst
 
     @staticmethod
