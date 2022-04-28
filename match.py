@@ -267,7 +267,7 @@ kp, des = [], []
 pre, cur = None, None
 
 img = cv.imread(fns[0])
-resize_ratio = 8
+resize_ratio = 1
 dim = ( img.shape[0] // resize_ratio, img.shape[1] // resize_ratio )
 print("Resized dimension:", dim)
 
@@ -309,8 +309,7 @@ for i in tqdm(range(len(fns))):
   cur.img = cur_img
   cur.kp, cur.des = SIFT(cur_img)
 
-  cv.imwrite('panorama.jpg', panorama)
-  cv.imwrite('drive/MyDrive/panorama.png', panorama)
+  cv.imwrite(f'panorama{i}.jpg', panorama)
 
   pre, cur = cur, None
 
