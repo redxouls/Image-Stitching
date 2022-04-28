@@ -30,13 +30,13 @@ class SIFT:
     # create base image with double size and convert rgb to gray
     @staticmethod
     def create_initial_image(img, sigma):
-        print("Shape of input image: (%d, %d, %d)" % (img.shape[0], img.shape[1], img.shape[2]))
+        # print("Shape of input image: (%d, %d, %d)" % (img.shape[0], img.shape[1], img.shape[2]))
         print("Creating base image...")
-        if(img.shape[2] == 3 or img.shape[2] == 4):
+        if(len(img.shape) > 2 and (img.shape[2] == 3 or img.shape[2] == 4)):
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         else:
             gray = img.copy()
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)    
+        # gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)    
         sig_diff = math.sqrt(max(sigma**2 - (2*SIFT_INIT_SIGMA)**2, 0.01) )
         dbl = cv2.resize(gray, (0, 0), fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
         dbl = cv2.GaussianBlur(dbl, (0, 0), sigmaX=sig_diff, sigmaY=sig_diff)
