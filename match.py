@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import cv2 as cv
 from scipy.spatial import KDTree
@@ -5,60 +6,59 @@ import random
 from matplotlib import pyplot as plt
 import glob
 from PIL import Image
-from SIFT import SIFT
 from tqdm import tqdm
-import os
+from SIFT import SIFT  as S
 
+def SIFT(img):
+  gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+  sift = S()
+  k, d = sift.detect_and_compute(gray)
+  d = np.array(d)
+  return k, d
 
-filenames = sorted(os.listdir("./parrington"), reverse=True)
-filenames = [filename for filename in filenames if filename.startswith("prtn")]
-print(filenames)
+def cylindrical_warp(src, f):
+  map_x = np.zeros((src.shape[0], src.shape[1]), dtype=np.float32)
+  map_y = np.zeros((src.shape[0], src.shape[1]), dtype=np.float32)
+  c = [ src.shape[0] / 2.0, src.shape[1] / 2.0 ]
+  f2 = f ** 2
+  for i in range(src.shape[0]):
+    for j in range(src.shape[1]):
+      map_x[i][j] = f * np.tan( 1.0 * (j - c[1]) / f ) + c[1]
+      map_y[i][j] = 1.0 * (i - c[0]) / f * np.sqrt( (map_x[i][j] - c[1])**2 + f2 ) + c[0]
+  warp = cv.remap(src, map_x, map_y, cv.INTER_LINEAR,	borderMode = cv.BORDER_CONSTANT)
+  cutoff = [0, src.shape[1] - 1]
+  black = np.zeros(3)  # Black pixel.
+  while np.array_equal(warp[ int(warp.shape[0]/2), cutoff[0] ], black):
+    cutoff[0] += 1
+  while np.array_equal(warp[ int(warp.shape[0]/2), cutoff[1] ], black):
+    cutoff[1] -= 1
+  warp = warp[ :, cutoff[0]+2 : cutoff[1]-1 ]
+  print(cutoff)
 
-imgs = []
-keypoints, descriptors = [], []
-scale_percent = 50 # percent of original size
+  
+  return warp
 
-for filename in filenames[16:18]:
-    img = cv.imread(f"./parrington/{filename}")
-    if scale_percent != 100:
-        width = int(img.shape[1] * scale_percent / 100)
-        height = int(img.shape[0] * scale_percent / 100)
-        dim = (width, height)
-        img = cv.resize(img, dim, interpolation=cv.INTER_AREA)
-    imgs.append(img)
-
-    sift = SIFT()
-    k, d = sift.detect_and_compute(img)
-    
-    # k_raw = np.load(f"./data/{filename[:-4]}_keypoint.npy", allow_pickle=True)
-    # k = [cv.KeyPoint(x=point[0][0],y=point[0][1],_size=point[1], _angle=point[2], _response=point[3], _octave=point[4], _class_id=point[5]) for point in k_raw]
-    # d = np.load(f"./data/{filename[:-4]}_descriptor.npy", allow_pickle=True)
-
-    keypoints.append(k)
-    descriptors.append(d)
-    print(f"Filename: {filename} , Keypoints#: {len(k)}")
-
-imgs = np.array(imgs)
-
-
-def match_feat(kp, des):
-  tree = [KDTree(des[0]), KDTree(des[1])]
+def match_feat(kp_tar, des_tar, kp_src, des_src):
+  print("matching feature")
+  tree = [KDTree(des_tar), KDTree(des_src)]
   match = [[], []]
   
-  for point in des[1]:
-    dist0, ind0 = tree[0].query(point, k=1)
-    dist1, ind1 = tree[1].query(des[0][ind0], k=1)
-    if des[1][ind1][0] == point[0] and des[1][ind1][1] == point[1]:
-      match[0].append(kp[0][ind0].pt)
-      match[1].append(kp[1][ind1].pt)
-  print(len(match[1]))
+  for point in des_src:
+    dist0, ind0 = tree[0].query(point, k=2)
+    if dist0[0] / dist0[1] > 0.7:
+      continue
+    dist0, ind0 = dist0[0], ind0[0]
+    dist1, ind1 = tree[1].query(des_tar[ind0], k=1)
+    if des_src[ind1][0] == point[0] and des_src[ind1][1] == point[1]:
+      match[0].append( kp_tar[ind0].pt )
+      match[1].append( kp_src[ind1].pt )
+  # print("matching feature #", len(match[1]))
   # for i in (0,1):
   #   cv.drawKeypoints(img[i], match[i], img[i])
   #   cv.imwrite('sift_keypoints'+ str(i) +'.jpg', img[i])
   return np.array(match[0]), np.array(match[1])
 
-p1, p2 = match_feat(keypoints[:2], descriptors[:2])
-
+# p1, p2 = match_feat(kp[15:17], des[15:17])
 
 def plot_matches(p1, p2, total_img):
     match_img = total_img.copy()
@@ -75,9 +75,8 @@ def plot_matches(p1, p2, total_img):
 
     plt.show()
 
-total_img = np.concatenate((imgs[0], imgs[1]), axis=1)
-# plot_matches(p1, p2, total_img)
-
+# total_img = np.concatenate((img[16], img[15]), axis=1)
+# plot_matches(p2, p1, total_img)
 
 def homography(p1, p2):
   rows = []
@@ -91,103 +90,220 @@ def homography(p1, p2):
   H = V[-1].reshape(3, 3)
   H = H/H[2, 2] # standardize to let w*H[2,2] = 1
   return H
+def cylin_affine(p1, p2):
+  A = np.zeros( (p1.shape[0] * 2, 6) )
+  B = np.zeros( (p1.shape[0] * 2, 1) )
+  ind = 0
+  A_rows = []
+  B_rows = []
+  for a, b in zip(p1, p2):
+    row1 = [1, 0, b[0], b[1], 0, 0]
+    row2 = [0, 1, 0, 0, b[0], b[1]]
+    A_rows.append(row1)
+    A_rows.append(row2)
+    B_rows.append( [a[0]] )
+    B_rows.append( [a[1]] )
+  A = np.array(A_rows)
+  B = np.array(B_rows)
+  cyl_aff , _, _, _ = np.linalg.lstsq(A, B, rcond=-1)
+  cyl_aff = np.array( [[ cyl_aff[2], cyl_aff[3], cyl_aff[0] ], [ cyl_aff[4], cyl_aff[5], cyl_aff[1]]] ).squeeze()
+  return cyl_aff
 
-def ransac(p1, p2, thresh = 10, k = 4, iter = 2000):
+def ransac(tar, src, thresh = 0.5, k = 3, iter = 3000, method = "affine"):
+  print("Ransac")
   max_match = 0
   all_match = []
   best_match_pairs = [[], []]
-  best_H = None
+  best_trans = None
   for i in range(iter):
     match = 0
     match_pairs = [[],[]]
-    sam = random.sample( range(p2.shape[0]), k )
-    H = homography( p1[sam], p2[sam] )
+    sam = random.sample( range(src.shape[0]), k )
 
-    # check rank 
-    if np.linalg.matrix_rank(H) < 3:
-      continue
-    for i in range(p2.shape[0]):
-      p = np.append(p2[i], 1)
-      pred = np.dot(H, p)
-      pred = np.array( [ pred[0]/pred[2], pred[1]/pred[2] ])
-      if np.linalg.norm(pred - p1[i], ord = 2) < thresh:
+    if method == "homography":
+      H = homography( tar[sam], src[sam] )
+    elif method == "affine":
+      A = cylin_affine( tar[sam], src[sam] )
+
+    # # check rank 
+    # if np.linalg.matrix_rank(H) < 3:
+    #   continue
+    for i in range(src.shape[0]):
+      p = np.append(src[i], 1)
+      if method == "homography":
+        pred = np.dot(H, p)
+        pred = np.array( [ pred[0]/pred[2], pred[1]/pred[2] ])
+      elif method == "affine":
+        pred = np.dot(A, p)
+      # print(pred)
+      if np.linalg.norm(pred - tar[i], ord = 2) < thresh:
         match += 1
-        match_pairs[0].append(p1[i])
-        match_pairs[1].append(p2[i])
+        match_pairs[0].append(tar[i])
+        match_pairs[1].append(src[i])
     all_match.append(match)
     if match > max_match:
       max_match = match
       best_match_pairs = match_pairs
-      best_H = H.copy()
+      if method == "homography":
+        best_trans = H.copy()
+      elif method == "affine":
+        best_trans = A.copy()
     
-  print("Inliers / Total pairs:", max_match, "/", p2.shape[0], "(", max_match/p2.shape[0], ")")
-  return best_H, np.array(best_match_pairs)
+  print("Inliers / Total pairs:", max_match, "/", src.shape[0], "(", max_match/src.shape[0], ")")
+  # print(sorted(all_match, reverse=True))
+  return best_trans, np.array(best_match_pairs)
 
-H, pairs = ransac(p1, p2)
-total_img = np.concatenate((imgs[0], imgs[1]), axis=1)
-plot_matches(pairs[0], pairs[1], total_img)
+# A, pairs = ransac(p2, p1)
+
+# total_img = np.concatenate((img[16], img[15]), axis=1)
+# plot_matches(pairs[0], pairs[1], total_img)
+
+def stitch_img(img1, img2, trans):
+  # print("Stitching image")
+  # stitch img2 to img1
+  # img1 = cv.normalize(img1.astype('float'), None, 0.0, 1.0, cv.NORM_MINMAX)
+  # img2 = cv.normalize(img2.astype('float'), None, 0.0, 1.0, cv.NORM_MINMAX)
+  corners = np.array([[0, 0, 1], [0, img2.shape[0], 1], [img2.shape[1], 0, 1], [img2.shape[1], img2.shape[0], 1]]).T
+  # print(corners)
+
+  # find corners of the warped image
+  mapped_corners = np.dot(trans, corners).T.astype("int32")
+  # mapped_corners = mapped_corners / mapped_corners[2, :]
+  # mapped_corners = mapped_corners[:-1, :].T.astype("int32")
+  # print(mapped_corners)
+
+  # shift the warpped image downwards if the transformed y coordinate is a negative value
+  min_v = min(0, min(mapped_corners[:, 1]))
+  max_v = max(img1.shape[0], max(mapped_corners[:, 1]))
+  max_h = max(img1.shape[1], max(mapped_corners[:, 0]))
+  
+  mapped_h = [ min(mapped_corners[:, 0]), max(mapped_corners[:, 0]) ]
+  mapped_v = [ min(mapped_corners[:, 1]) - min_v, max(mapped_corners[:, 1]) ]
+
+  trans_new = trans.copy()
+  trans_new[1, 2] += abs(min_v)
+  
+  # shift the base image downwards if the transformed y coordinate is a negative value
+  top_pad = np.zeros( ( abs(min_v), img1.shape[1], 3 ) )
+  bot_pad = np.zeros( ( max_v - img1.shape[0], img1.shape[1], 3 ) )
+  right_pad = np.zeros( ( max_v - min_v, max_h - img1.shape[1], 3) )
+  # print(top_pad.shape, bot_pad.shape)
+
+  warped_l = np.concatenate( (top_pad, img1, bot_pad), axis=0 )
+  warped_l = np.concatenate( (warped_l, right_pad), axis=1 ).astype('uint32')
+  # print(warped_l.shape)
+  # cv.imwrite('warped_l.jpg', np.array(warped_l))
+
+  
+
+  w, h = max_h, max_v - min_v
+  # warped = cv.warpPerspective(src = img2, M = trans_new, dsize = ( w, h ) )
+  warped_r = cv.warpAffine(src = img2, M = trans_new, dsize = (w, h)).astype('uint32')
+
+  # print(warped_r.shape)
+  # fig, ax = plt.subplots()
+  # ax.imshow(np.array(warped_r))
+  
+  # cv.imwrite('warped_r.jpg', np.array(warped_r))
+
+  black = np.zeros(3)  # Black pixel.
+  # Stitching procedure, store results in warped_l.
+  for i in range( mapped_v[0], mapped_v[1] ):
+      for j in range( mapped_h[0], mapped_h[1] ):
+          pixel_l = warped_l[i, j, :]
+          pixel_r = warped_r[i, j, :]
+          
+          if not np.array_equal(pixel_l, black) and np.array_equal(pixel_r, black):
+              warped_l[i, j, :] = pixel_l
+          elif np.array_equal(pixel_l, black) and not np.array_equal(pixel_r, black):
+              warped_l[i, j, :] = pixel_r
+          elif not np.array_equal(pixel_l, black) and not np.array_equal(pixel_r, black):
+              warped_l[i, j, :] = (pixel_l + pixel_r) / 2
+          else:
+              pass
+                
+  stitch_image = warped_l[:warped_r.shape[0], :warped_r.shape[1], :].astype("uint8")
+  return stitch_image, warped_r.astype("uint8")
+
+# stitched = stitch_img(img[16], img[15], A)
+# plt.imshow(stitched)
+
+# assume we can get the focal length estimate
+focal = []
+with open(os.path.join("parrington", "pano.txt")) as f:
+  ind = 1
+  for line in f:
+    if ind % 13 == 12:
+      focal.append(float(line))
+    ind += 1
+print(focal)
+
+fns = sorted(glob.glob(os.path.join("parrington","prtn*.jpg")))[:3]
+print(fns)
+img = []
+kp, des = [], []
+pre, cur = None, None
+# dim = (795, 530)
+
+class Partial_img:
+  def __init__(self, img = None, kp = None, des = None):
+    self.img = img
+    self.kp = kp
+    self.des = des
+panorama = None
+for i in tqdm(range(len(fns)-1, -1, -1)):
+  # tmp = cv.resize(cv.imread(fns[i]), (dim[1], dim[0]))
+  img = cv.imread(fns[i])
+  img = cylindrical_warp(img, focal[i])
+  k, d = SIFT(img)
+
+  cur = Partial_img(img, k, d)
+  print( fns[i], "keypoint num:", len(k))
+  if i == len(fns)-1:
+    panorama = cur.img
+    pre, cur = cur, None
+    continue
+  p_pre, p_cur = match_feat(pre.kp, pre.des, cur.kp, cur.des)
+  A, pairs = ransac(p_pre, p_cur)
+
+  panorama, cur_img = stitch_img(panorama, cur.img, A)
+  cur.img = cur_img
+  cur.kp, cur.des = SIFT(cur_img)
+
+  cv.imwrite('panorama.jpg', panorama)
+
+  pre, cur = cur, None
+
+plt.imshow(panorama)
 
 
-def stitch_img(left, right, H):
-    print("stiching image ...")
-    
-    # Convert to double and normalize. Avoid noise.
-    left = cv.normalize(left.astype('float'), None, 
-                            0.0, 1.0, cv.NORM_MINMAX)   
-    # Convert to double and normalize.
-    right = cv.normalize(right.astype('float'), None, 
-                            0.0, 1.0, cv.NORM_MINMAX)   
-    
-    # left image
-    height_l, width_l, channel_l = left.shape
-    corners = [[0, 0, 1], [width_l, 0, 1], [width_l, height_l, 1], [0, height_l, 1]]
-    corners_new = [np.dot(H, corner) for corner in corners]
-    corners_new = np.array(corners_new).T 
-    x_news = corners_new[0] / corners_new[2]
-    y_news = corners_new[1] / corners_new[2]
-    y_min = min(y_news)
-    x_min = min(x_news)
+# filenames = sorted(os.listdir("./Jiannan"))
+# # filenames = [filename for filename in filenames if filename.startswith("prtn")]
+# print(filenames)
 
-    translation_mat = np.array([[1, 0, -x_min], [0, 1, -y_min], [0, 0, 1]])
-    H = np.dot(translation_mat, H)
-    
-    # Get height, width
-    height_new = int(round(abs(y_min) + height_l))
-    width_new = int(round(abs(x_min) + width_l))
-    size = (width_new, height_new)
+# imgs = []
+# keypoints, descriptors = [], []
+# scale_percent = 10 # percent of original size
 
-    # right image
-    warped_l = cv.warpPerspective(src=left, M=H, dsize=size)
+# for filename in filenames[4:6]:
+# 	img = cv.imread(f"./Jiannan/{filename}")
+# 	if scale_percent != 100:
+# 			width = int(img.shape[1] * scale_percent / 100)
+# 			height = int(img.shape[0] * scale_percent / 100)
+# 			dim = (width, height)
+# 			img = cv.resize(img, dim, interpolation=cv.INTER_AREA)
+# 	imgs.append(img)
 
-    height_r, width_r, channel_r = right.shape
-    
-    height_new = int(round(abs(y_min) + height_r))
-    width_new = int(round(abs(x_min) + width_r))
-    size = (width_new, height_new)
-    
+# 	# sift = SIFT()
+# 	# k, d = sift.detect_and_compute(img)
+	
+# 	k_raw = np.load(f"./data/Jiannan/{filename[:-4]}_keypoint.npy", allow_pickle=True)
+# 	k = [cv.KeyPoint(x=point[0][0],y=point[0][1],_size=point[1], _angle=point[2], _response=point[3], _octave=point[4], _class_id=point[5]) for point in k_raw]
+# 	d = np.load(f"./data/Jiannan/{filename[:-4]}_descriptor.npy", allow_pickle=True)
 
-    warped_r = cv.warpPerspective(src=right, M=translation_mat, dsize=size)
-     
-    black = np.zeros(3)  # Black pixel.
-    
-    # Stitching procedure, store results in warped_l.
-    for i in tqdm(range(warped_r.shape[0])):
-        for j in range(warped_r.shape[1]):
-            pixel_l = warped_l[i, j, :]
-            pixel_r = warped_r[i, j, :]
-            
-            if not np.array_equal(pixel_l, black) and np.array_equal(pixel_r, black):
-                warped_l[i, j, :] = pixel_l
-            elif np.array_equal(pixel_l, black) and not np.array_equal(pixel_r, black):
-                warped_l[i, j, :] = pixel_r
-            elif not np.array_equal(pixel_l, black) and not np.array_equal(pixel_r, black):
-                warped_l[i, j, :] = (pixel_l + pixel_r) / 2
-            else:
-                pass
-                  
-    stitch_image = warped_l[:warped_r.shape[0], :warped_r.shape[1], :]
-    return stitch_image
+# 	keypoints.append(k)
+# 	descriptors.append(d)
+# 	print(f"Filename: {filename} , Keypoints#: {len(k)}")
 
+# imgs = np.array(imgs)
 
-plt.imshow(stitch_img(imgs[1], imgs[0], H))
-plt.show()
