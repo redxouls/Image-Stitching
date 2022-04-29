@@ -1,4 +1,5 @@
 import os
+from time import time
 import numpy as np
 import cv2 as cv
 from scipy.spatial import KDTree
@@ -19,12 +20,15 @@ def SIFT(img):
 def cylindrical_warp(src, f):
   map_x = np.zeros((src.shape[0], src.shape[1]), dtype=np.float32)
   map_y = np.zeros((src.shape[0], src.shape[1]), dtype=np.float32)
+  
   c = [ src.shape[0] / 2.0, src.shape[1] / 2.0 ]
   f2 = f ** 2
+  
+  
   for i in range(src.shape[0]):
-    for j in range(src.shape[1]):
-      map_x[i][j] = f * np.tan( 1.0 * (j - c[1]) / f ) + c[1]
-      map_y[i][j] = 1.0 * (i - c[0]) / f * np.sqrt( (map_x[i][j] - c[1])**2 + f2 ) + c[0]
+    map_x[i] = (f * np.tan( 1.0 * (np.arange(src.shape[1]) - c[1]) / f ) + c[1])
+    map_y[i] = 1.0 * (i - c[0]) / f * np.sqrt( (map_x[i] - c[1])**2 + f2 ) + c[0]
+    
   warp = cv.remap(src, map_x, map_y, cv.INTER_LINEAR,	borderMode = cv.BORDER_CONSTANT)
   cutoff = [0, src.shape[1] - 1]
   black = np.zeros(3)  # Black pixel.
@@ -88,6 +92,7 @@ def homography(p1, p2):
   H = V[-1].reshape(3, 3)
   H = H/H[2, 2] # standardize to let w*H[2,2] = 1
   return H
+
 def cylin_affine(p1, p2):
   A = np.zeros( (p1.shape[0] * 2, 6) )
   B = np.zeros( (p1.shape[0] * 2, 1) )
@@ -159,16 +164,10 @@ def ransac(tar, src, thresh = 0.5, k = 3, iter = 3000, method = "affine"):
 def stitch_img(img1, img2, trans):
   print("Stitching image")
   # stitch img2 to img1
-  # img1 = cv.normalize(img1.astype('float'), None, 0.0, 1.0, cv.NORM_MINMAX)
-  # img2 = cv.normalize(img2.astype('float'), None, 0.0, 1.0, cv.NORM_MINMAX)
   corners = np.array([[0, 0, 1], [0, img2.shape[0], 1], [img2.shape[1], 0, 1], [img2.shape[1], img2.shape[0], 1]]).T
-  # print(corners)
-
+  
   # find corners of the warped image
   mapped_corners = np.dot(trans, corners).T.astype("int32")
-  # mapped_corners = mapped_corners / mapped_corners[2, :]
-  # mapped_corners = mapped_corners[:-1, :].T.astype("int32")
-  # print(mapped_corners)
 
   # shift the warpped image downwards if the transformed y coordinate is a negative value
   min_v = min(0, min(mapped_corners[:, 1]))
@@ -189,11 +188,8 @@ def stitch_img(img1, img2, trans):
 
   warped_l = np.concatenate( (top_pad, img1, bot_pad), axis=0 )
   warped_l = np.concatenate( (warped_l, right_pad), axis=1 ).astype('uint32')
-  # print(warped_l.shape)
-  # cv.imwrite('warped_l.jpg', np.array(warped_l))
-
+  
   w, h = max_h, max_v - min_v
-  # warped = cv.warpPerspective(src = img2, M = trans_new, dsize = ( w, h ) )
   warped_r = cv.warpAffine(src = img2, M = trans_new, dsize = (w, h)).astype('uint32')
 
   weight = np.zeros( (h, mapped_h[1]) )
@@ -233,12 +229,6 @@ def stitch_img(img1, img2, trans):
       weight[i, j] = ind * interval
       ind += 1
 
-  # print(warped_r.shape)
-  # fig, ax = plt.subplots()
-  # ax.imshow(np.array(warped_r))
-  
-  # cv.imwrite('warped_r.jpg', np.array(warped_r))
-
   # Stitching procedure, store results in warped_l.
   for i in range( mapped_v[0], mapped_v[1] ):
       for j in range( mapped_h[0], mapped_h[1] ):
@@ -257,8 +247,6 @@ def stitch_img(img1, img2, trans):
   stitch_image = warped_l[:warped_r.shape[0], :warped_r.shape[1], :].astype("uint8")
   return stitch_image, warped_r.astype("uint8")
 
-# stitched = stitch_img(img[16], img[15], A)
-# plt.imshow(stitched)
 
 fns = sorted(glob.glob(os.path.join("Jiannan","*.JPG")))
 print(fns)
@@ -272,6 +260,7 @@ dim = ( img.shape[0] // resize_ratio, img.shape[1] // resize_ratio )
 print("Resized dimension:", dim)
 
 # assume we can get the focal length estimate
+# focal = [2146.8, 2145.43, 2143.63, 2141.88, 2140.77, 2138.3, 2135.64, 2130.42, 2127.55, 2124.3, 2117.83, 2116.86, 2115.19, 2113.63, 2149.37]
 focal = []
 with open(os.path.join("Jiannan", "pano.txt")) as f:
   ind = 1
@@ -309,7 +298,7 @@ for i in tqdm(range(len(fns))):
   cur.img = cur_img
   cur.kp, cur.des = SIFT(cur_img)
 
-  cv.imwrite(f'panorama{i}.jpg', panorama)
+  cv.imwrite(f'panorama_all_autoscale_1_{i}.jpg', panorama)
 
   pre, cur = cur, None
 

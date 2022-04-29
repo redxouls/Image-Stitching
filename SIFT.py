@@ -32,7 +32,12 @@ class SIFT:
     def create_initial_image(img, sigma):
         print(f"Shape of input image: {str(img.shape)}")
         print("Creating base image...")
-            
+        scale_down = 1
+        if max(img.shape) > 1000:
+            scale_down = int(np.round(max(img.shape)/1000))
+            img  = cv2.resize(img, (0, 0), fx=1/scale_down, fy=1/scale_down)
+            print(f"Reshape to {img.shape} with scale down={scale_down}")
+
         if(len(img.shape) > 2 and (img.shape[2] == 3 or img.shape[2] == 4)):
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         else:
@@ -41,7 +46,7 @@ class SIFT:
         sig_diff = math.sqrt(max(sigma**2 - (2*SIFT_INIT_SIGMA)**2, 0.01) )
         dbl = cv2.resize(gray, (0, 0), fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
         dbl = cv2.GaussianBlur(dbl, (0, 0), sigmaX=sig_diff, sigmaY=sig_diff)
-        return dbl
+        return dbl, scale_down
 
     # build a gussian pyramid from base image with given sigma and n_octave_layers
     @staticmethod
@@ -133,9 +138,9 @@ class SIFT:
         val = img_sub[1, 1]
         if abs(val) > threshold:
             if val > 0:
-                return (np.all(val >= prev_img_sub) and np.all(val >= next_img_sub) and np.all(val >= img_sub))
+                return (np.all(val >= [prev_img_sub, next_img_sub, img_sub]))
             elif val < 0:
-                return (np.all(val <= prev_img_sub) and np.all(val <= next_img_sub) and  np.all(val <= img_sub))
+                return (np.all(val <= [prev_img_sub, next_img_sub, img_sub]))
         return False
 
 
@@ -452,13 +457,16 @@ class SIFT:
 
     @staticmethod
     def detect_and_compute(img):
-        base_img  = SIFT.create_initial_image(img, sigma=1.6)
+        base_img, scale_down  = SIFT.create_initial_image(img, sigma=1.6)
         pyr = SIFT.build_gaussian_pyramid(base_img, sigma=1.6, n_octave_layers=3)
         dog_pyr = SIFT.build_DoG_pyramid(pyr)
         keypoints = SIFT.find_scale_space_extrema(pyr, dog_pyr,  n_octave_layers=3, sigma=1.6, image_border_width=5, contrast_threshold=0.04)
         keypoints = SIFT.remove_duplicate_keypoints(keypoints, n_points=2000)
         keypoints = SIFT.convert_keypoints_to_input_image_size(keypoints)
         descriptors = SIFT.calc_descriptors(pyr, keypoints, n_octave_layers=3)
+        for keypoint in keypoints:
+            keypoint.pt = tuple(np.array(keypoint.pt)*scale_down)
+        
         return keypoints, descriptors
 
 def get_args():
