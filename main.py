@@ -1,37 +1,57 @@
+import os
+import cv2 as cv
+from matplotlib import pyplot as plt
+import glob
 from PIL import Image
-from PIL.ExifTags import TAGS
+from tqdm import tqdm
+from utils import Partial_img, SIFT, cylindrical_warp, match_feat, homography, cylin_affine, ransac, stitch_img, get_args, safe_mkdir
 
-import cv2
-import numpy as np
-import matplotlib.pyplot as plt
+if __name__ == '__main__':
+	args = get_args()
+	safe_mkdir(args.output)
+	filenames = sorted(glob.glob(os.path.join(args.input, f"*.JPG")))
+	print(f"Located filenames: {str(filenames)}")
+	
+	img = []
+	kp, des = [], []
+	pre, cur = None, None
 
-base_name = "DSC029"
-start = 59
-end = 76
+	img = cv.imread(filenames[0])
+	resize_ratio = 8
+	dim = ( img.shape[0] // resize_ratio, img.shape[1] // resize_ratio )
+	print("Resized dimension:", dim)
 
-img = cv2.imread("./images/DSC02976.JPG", cv2.IMREAD_COLOR)
+	# assume we can get the focal length estimate
+	focal = []
+	with open(os.path.join(args.input, "pano.txt")) as f:
+		ind = 1
+		for line in f:
+			if ind % 13 == 12:
+				focal.append(float(line))
+			ind += 1
+	print(f"Focal lengths: {str(focal)}")
 
+	panorama = None
+	for i in tqdm(range(len(filenames))):
+		print(f"Processing: {str(filenames[i])}")
+		img = cv.resize(cv.imread(filenames[i]), (dim[1], dim[0]))
+		img = cylindrical_warp(img, focal[i])
+		k, d = SIFT(img)
 
-scale_percent = 10 # percent of original size
-width = int(img.shape[1] * scale_percent / 100)
-height = int(img.shape[0] * scale_percent / 100)
-dim = (width, height)
-  
-# resize image
-img = cv2.resize(img, dim, interpolation = cv2.INTER_AREA)
+		cur = Partial_img(img, k, d)
+		print( filenames[i], "keypoint num:", len(k))
+		if i == 0:
+			panorama = cur.img
+			pre, cur = cur, None
+			continue
+		p_pre, p_cur = match_feat(pre.kp, pre.des, cur.kp, cur.des)
+		A, pairs = ransac(p_pre, p_cur)
 
-gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+		panorama, cur_img = stitch_img(panorama, cur.img, A)
+		cur.img = cur_img
+		cur.kp, cur.des = SIFT(cur_img)
 
-sift = cv2.SIFT_create()
-keypoints_1, descriptors_1 = sift.detectAndCompute(img, None)
-print(len(keypoints_1))
-print(keypoints_1)
-print(len(descriptors_1))
-print(descriptors_1[0])
-print(descriptors_1[0].shape)
-cv2.drawKeypoints(gray, keypoints_1, img)
-
-cv2.imshow('My Image', img)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+		cv.imwrite(os.path.join(args.output, f'panorama_{i}.jpg'), panorama)
+		
+		pre, cur = cur, None
 

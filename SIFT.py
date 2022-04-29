@@ -456,7 +456,7 @@ class SIFT:
         pyr = SIFT.build_gaussian_pyramid(base_img, sigma=1.6, n_octave_layers=3)
         dog_pyr = SIFT.build_DoG_pyramid(pyr)
         keypoints = SIFT.find_scale_space_extrema(pyr, dog_pyr,  n_octave_layers=3, sigma=1.6, image_border_width=5, contrast_threshold=0.04)
-        keypoints = SIFT.remove_duplicate_keypoints(keypoints, n_points=2000)
+        keypoints = SIFT.remove_duplicate_keypoints(keypoints, n_points=3000)
         keypoints = SIFT.convert_keypoints_to_input_image_size(keypoints)
         descriptors = SIFT.calc_descriptors(pyr, keypoints, n_octave_layers=3)
         
