@@ -56,7 +56,7 @@ def match_feat(kp_tar, des_tar, kp_src, des_src):
 	
 	for point in des_src:
 		dist0, ind0 = tree[0].query(point, k=2)
-		if dist0[0] / dist0[1] > 0.7:
+		if dist0[0] / dist0[1] > 0.5:
 			continue
 		dist0, ind0 = dist0[0], ind0[0]
 		dist1, ind1 = tree[1].query(des_tar[ind0], k=1)
@@ -114,7 +114,7 @@ def cylin_affine(p1, p2):
 	cyl_aff = np.array( [[ cyl_aff[2], cyl_aff[3], cyl_aff[0] ], [ cyl_aff[4], cyl_aff[5], cyl_aff[1]]] ).squeeze()
 	return cyl_aff
 
-def ransac(tar, src, thresh = 0.5, k = 3, iter = 3000, method = "affine"):
+def ransac(tar, src, thresh = 0.5, k = 3, iter = 5000, method = "affine"):
 	print("Start Ransac ...")
 	max_match = 0
 	all_match = []
