@@ -60,8 +60,6 @@ def match_feat(kp_tar, des_tar, kp_src, des_src):
   #   cv.imwrite('sift_keypoints'+ str(i) +'.jpg', img[i])
   return np.array(match[0]), np.array(match[1])
 
-# p1, p2 = match_feat(kp[15:17], des[15:17])
-
 def plot_matches(p1, p2, total_img):
     match_img = total_img.copy()
     offset = total_img.shape[1]/2
@@ -76,9 +74,6 @@ def plot_matches(p1, p2, total_img):
             'r', linewidth=0.1)
 
     plt.show()
-
-# total_img = np.concatenate((img[16], img[15]), axis=1)
-# plot_matches(p2, p1, total_img)
 
 def homography(p1, p2):
   rows = []
@@ -157,9 +152,6 @@ def ransac(tar, src, thresh = 0.5, k = 3, iter = 3000, method = "affine"):
   return best_trans, np.array(best_match_pairs)
 
 # A, pairs = ransac(p2, p1)
-
-# total_img = np.concatenate((img[16], img[15]), axis=1)
-# plot_matches(pairs[0], pairs[1], total_img)
 
 def stitch_img(img1, img2, trans):
   print("Stitching image")
@@ -255,14 +247,14 @@ kp, des = [], []
 pre, cur = None, None
 
 img = cv.imread(fns[0])
-resize_ratio = 1
+resize_ratio = 8
 dim = ( img.shape[0] // resize_ratio, img.shape[1] // resize_ratio )
 print("Resized dimension:", dim)
 
 # assume we can get the focal length estimate
 # focal = [2146.8, 2145.43, 2143.63, 2141.88, 2140.77, 2138.3, 2135.64, 2130.42, 2127.55, 2124.3, 2117.83, 2116.86, 2115.19, 2113.63, 2149.37]
 focal = []
-with open(os.path.join("Jiannan", "pano.txt")) as f:
+with open(os.path.join("data/Jiannan", "pano.txt")) as f:
   ind = 1
   for line in f:
     if ind % 13 == 12:
