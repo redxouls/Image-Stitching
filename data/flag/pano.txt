@@ -1,3 +1,16 @@
+C:\Users\yanghan9014\Desktop\VFX\Image-Stitching\images\DSC02959.JPG
+7952 5304
+
+8 0 2651.5 
+0 8 3975.5 
+0 0 1 
+
+0.00159435 -0.0305033 -0.999533 
+0.999848 -0.0173452 0.00212416 
+-0.017402 -0.999384 0.0304711 
+
+930.837
+
 C:\Users\yanghan9014\Desktop\VFX\Image-Stitching\images\DSC02960.JPG
 7952 5304
 
@@ -205,17 +218,4 @@ C:\Users\yanghan9014\Desktop\VFX\Image-Stitching\images\DSC02976.JPG
 -0.0189436 0.998812 0.0448964 
 
 903.509
-
-C:\Users\yanghan9014\Desktop\VFX\Image-Stitching\images\DSC02959.JPG
-7952 5304
-
-8 0 2651.5 
-0 8 3975.5 
-0 0 1 
-
-0.00159435 -0.0305033 -0.999533 
-0.999848 -0.0173452 0.00212416 
--0.017402 -0.999384 0.0304711 
-
-930.837
 
